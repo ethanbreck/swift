@@ -3,7 +3,7 @@
 
 # RUN: find %swift_obj_root -type f \( -name "*.swift" -or -name "*.py" -or -name "*.gyb" \) | xargs %s
 
-VERBOSE=false
+VERBOSE=true
 PATCH=false
 function print() {
 	$VERBOSE && echo $@
@@ -22,8 +22,8 @@ COPYRIGHT_LITERAL_PATTERN="Copyright (c) "
 function dates() {
 	local G_LOG_OUTPUT=$(git log --format="%ad" --date="format:%Y" -- $@)
 
-	EXPECTED_CREATED_AT=$(tail -1 <<< $G_LOG_OUTPUT)
-	EXPECTED_LAST_EDIT=$(head -1 <<< $G_LOG_OUTPUT)
+	EXPECTED_CREATED_AT=$(echo "$G_LOG_OUTPUT" | tail -n1)
+	EXPECTED_LAST_EDIT=$(echo "$G_LOG_OUTPUT" | head -n1)
 
 	print "created at $EXPECTED_CREATED_AT, last edit at $EXPECTED_LAST_EDIT"
 }
@@ -45,8 +45,7 @@ function copyright_header_is_conformant() {
 
 		print "matching ${COPYRIGHT_LITERAL_PATTERN}${COPYRIGHT_RANGE_PATTERN}"
 		local GREP_OUTPUT=$(grep -o "${COPYRIGHT_LITERAL_PATTERN}${COPYRIGHT_RANGE_PATTERN}" $@)
-		echo lol
-		echo $GREP_OUTPUT
+		echo "Found ${GREP_OUTPUT}"
 		CREATED_AT=$(echo $GREP_OUTPUT | cut -c 15- | cut -c -4)
 		LAST_EDIT=$(echo $GREP_OUTPUT | cut -c 22-)
 
@@ -55,17 +54,31 @@ function copyright_header_is_conformant() {
 		SINGLE_YEAR=true
 
 		local GREP_OUTPUT=$(grep -o "${COPYRIGHT_LITERAL_PATTERN}${COPYRIGHT_SINGLE_YEAR_PATTERN}" $@)
-		echo lol
-		echo $GREP_OUTPUT
+        echo "Found ${GREP_OUTPUT}"
 		CREATED_AT=$(echo $GREP_OUTPUT | cut -c 15- | cut -c -4)
 		LAST_EDIT=$EXPECTED_CREATED_AT
 	else
 		print "incorrectly formatted copyright header"
 		exit 1
 	fi
+
+    local RETURN_VALUE=0
+
+    if ! [[ $EXPECTED_CREATED_AT == $CREATED_AT ]]; then
+        echo "The creation date isn't conformant: ${CREATED_AT} isn't ${EXPECTED_CREATED_AT}"
+        local RETURN_VALUE=1
+    fi
+    if ! [[ $EXPECTED_LAST_EDIT == $LAST_EDIT ]]; then
+        echo "The last edit date isn't conformant: ${LAST_EDIT} isn't ${EXPECTED_LAST_EDIT}"
+        local RETURN_VALUE=1
+    fi
+
+    return $RETURN_VALUE
+
 }
 
 function patch() {
+    echo "hi"
 	if [ $EXPECTED_CREATED_AT == $EXPECTED_LAST_EDIT ]; then
 		local REPLACE="Copyright (c) $EXPECTED_CREATED_AT"
 	else
@@ -78,6 +91,10 @@ function patch() {
 		local REGEX="$COPYRIGHT_LITERAL_PATTERN$COPYRIGHT_RANGE_PATTERN"
 		print "range regex is $REGEX"
 	fi
+
+    echo "${REGEX}"
+    echo "${REPLACE}"
+
 
 	sed -i "" -e "s/$REGEX/$REPLACE/g" $@
 }
@@ -112,7 +129,10 @@ function main() {
 	has_copyright_header $@
 	copyright_header_is_conformant $@
 	if [ $PATCH == true ]; then
+        print "no crie"
 		patch $@
+    else
+        print "crie"
 	fi
 	local RETCODE=print_description $@
 	if [ $RETCODE != 0 ]; then
@@ -136,10 +156,10 @@ while getopts ":hpv" opt; do
 		v)
 			VERBOSE=true
         		;;
-    		p)
+		p)
 			PATCH=true
 			;;
 	esac
 done
-shift $((OPTIND -1))    # remove the processed options 
+shift $((OPTIND -1))    # remove the processed options
 main $@
